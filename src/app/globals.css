@@ -1,0 +1,30 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #f6f4ef;
+  --surface: #ffffff;
+  --surface-2: #efece5;
+  --border: #e3dfd5;
+  --fg: #1a1c1e;
+  --muted: #6b6f76;
+  --accent: #dc5a2e;      /* signal orange (Ordnance) */
+  --accent-soft: #fbe9e0;
+  --ok: #2f8f5b; --warn: #c98a12; --bad: #c0392b;
+  --c-si: #5b7c99; --c-li: #8c8c8c; --c-boi: #dc5a2e; --c-abi: #2f8f5b; --c-kbi: #7d5ba6;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14181c; --surface: #1c2126; --surface-2: #232930; --border: #2d343c;
+    --fg: #ece8df; --muted: #9aa0a8; --accent: #e86a2a; --accent-soft: #3a2418;
+  }
+}
+@theme inline {
+  --color-bg: var(--bg); --color-surface: var(--surface); --color-surface-2: var(--surface-2);
+  --color-border: var(--border); --color-fg: var(--fg); --color-muted: var(--muted);
+  --color-accent: var(--accent); --color-accent-soft: var(--accent-soft);
+  --color-ok: var(--ok); --color-warn: var(--warn); --color-bad: var(--bad);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Inter, sans-serif; --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+body { background: var(--bg); color: var(--fg); }
+input, select, textarea { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; font-size: 14px; color: var(--fg); width: 100%; }
+label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 2px; }
