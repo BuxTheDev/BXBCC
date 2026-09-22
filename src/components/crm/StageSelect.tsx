@@ -9,12 +9,14 @@ export default function StageSelect({ dealId, stageId, stages }: { dealId: strin
     <select
       value={stageId ?? ""}
       disabled={pending}
-      onChange={e => start(() => moveDeal(dealId, e.target.value))}
-      className="mt-2 text-xs"
-      style={{ padding: "3px 6px", fontSize: 12 }}
+      onChange={(e) => start(() => moveDeal(dealId, e.target.value))}
+      className="tabular"
+      style={{ padding: "4px 7px", fontSize: 11.5 }}
       aria-label="Move to stage"
     >
-      {stages.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+      {stages.map((s) => (
+        <option key={s.id} value={s.id}>{s.name}</option>
+      ))}
     </select>
   );
 }

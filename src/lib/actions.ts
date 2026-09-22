@@ -31,7 +31,7 @@ export async function createContact(fd: FormData) {
     organization_id: str(fd, "organization_id"), tags: (str(fd, "tags") ?? "").split(",").map(s => s.trim()).filter(Boolean),
     dnc: false, notes: str(fd, "notes"),
   });
-  revalidatePath("/contacts");
+  revalidatePath("/people");
 }
 
 export async function createDeal(fd: FormData) {
@@ -70,7 +70,7 @@ export async function addActivity(fd: FormData) {
     contact_id: str(fd, "contact_id"), occurred_at: new Date().toISOString(),
   });
   if (str(fd, "record_type") === "deal") await update("deals", str(fd, "record_id")!, { last_activity_at: new Date().toISOString() });
-  revalidatePath(`/deals/${str(fd, "record_id")}`); revalidatePath(`/contacts/${str(fd, "record_id")}`);
+  revalidatePath(`/deals/${str(fd, "record_id")}`); revalidatePath(`/people/${str(fd, "record_id")}`);
 }
 
 export async function upsertFront(fd: FormData) {

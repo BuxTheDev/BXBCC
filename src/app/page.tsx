@@ -1,201 +1,478 @@
 import Link from "next/link";
-import { Card, Stat, Badge, PageHeader, Empty, LinkButton } from "@/components/ui";
-import { ClassBadge, Progress, todayISO } from "@/components/life/helpers";
-import { TaskCheck } from "@/components/life/TaskCheck";
-import IncomeMix from "@/components/charts/IncomeMix";
-import { usd, usdCompact, pct, dateShort, cn } from "@/lib/format";
 import {
-  getRoles, getFronts, getEntities, getNetWorth, getGoals, getIncomeSeries, getIncomeByClassT12,
-  getPortfolio, getPipelineSummary, getTasks, getAlerts,
+  HeroBand, HeroStat, Tabs, Card, Badge, ClassBadge, Segments, Avatar,
+  Empty, SectionLabel, Row, LinkButton,
+} from "@/components/ui";
+import { TaskCheck } from "@/components/app/TaskCheck";
+import { PositionStats, IncomeMixCard, IncomeByClassCard } from "@/components/money/Position";
+import GoalsTree from "@/components/money/GoalsTree";
+import { usd, usdCompact, pct, dateShort, relTime, daysBetween, cn } from "@/lib/format";
+import {
+  getNetWorth, getDeals, getPortfolio, getAlerts, getAllVentureData, getPersonalFronts,
+  getTasks, getFronts, getActivities, getContacts, getGoals, getUnits, getProperties,
 } from "@/lib/data";
-import type { PipelineSummaryRow } from "@/lib/types";
+import type { Front, Task, Unit } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-export default async function Home() {
-  const [roles, fronts, entities, nw, goals, series, t12, portfolio, pipeline, tasks, alerts] = await Promise.all([
-    getRoles(), getFronts(), getEntities(), getNetWorth(), getGoals(), getIncomeSeries(), getIncomeByClassT12(),
-    getPortfolio(), getPipelineSummary(), getTasks(), getAlerts(),
-  ]);
+const TABS = [
+  { key: "today", label: "Today" },
+  { key: "position", label: "Position" },
+  { key: "movement", label: "Movement" },
+];
 
-  const active = fronts.filter(f => f.status === "active").sort((a, b) => a.rank - b.rank);
-  const byPlace = new Map<string, number>();
-  for (const f of fronts.filter(f => f.status !== "done")) byPlace.set(f.place ?? "Unspecified", (byPlace.get(f.place ?? "Unspecified") ?? 0) + 1);
-  const byJur = new Map<string, number>();
-  for (const e of entities) byJur.set(e.jurisdiction ?? "—", (byJur.get(e.jurisdiction ?? "—") ?? 0) + 1);
+const hrefFor = (k: string) => (k === "today" ? "/" : `/?tab=${k}`);
 
-  const nwGoal = goals.find(g => g.metric === "net_worth");
-  const target = nwGoal?.target_value ?? 30_000_000;
-  const goalPct = target > 0 ? nw.net_worth / target : 0;
+function greeting(hour: number) {
+  if (hour < 12) return "morning";
+  if (hour < 18) return "afternoon";
+  return "evening";
+}
 
-  const t12Total = Object.values(t12).reduce((a, b) => a + b, 0);
-  const abiShare = t12Total > 0 ? t12.ABI / t12Total : 0;
-  const boiShare = t12Total > 0 ? t12.BOI / t12Total : 0;
+/** Muted-to-accent ramp for pipeline stage segments. */
+function ramp(i: number, n: number) {
+  const t = n <= 1 ? 1 : i / (n - 1);
+  const from = [80, 86, 102];
+  const to = [139, 92, 246];
+  const c = from.map((v, k) => Math.round(v + (to[k] - v) * t));
+  return `rgb(${c[0]} ${c[1]} ${c[2]})`;
+}
 
-  const occRate = portfolio.total > 0 ? portfolio.occupied / portfolio.total : 0;
+/* ------------------------------------------------------------------ hero */
 
-  const pipes = new Map<string, PipelineSummaryRow[]>();
-  for (const r of pipeline) { if (!pipes.has(r.slug)) pipes.set(r.slug, []); pipes.get(r.slug)!.push(r); }
+async function Hero() {
+  const [nw, deals, portfolio] = await Promise.all([getNetWorth(), getDeals(), getPortfolio()]);
+  const openValue = deals.filter((d) => d.status === "open").reduce((s, d) => s + Number(d.value), 0);
+  const openCount = deals.filter((d) => d.status === "open").length;
+  const occupancy = portfolio.total > 0 ? portfolio.occupied / portfolio.total : 0;
+  const now = new Date();
 
-  const today = todayISO();
-  const due = tasks
-    .filter(t => t.status !== "done" && t.status !== "cancelled" && t.due_on && t.due_on <= today)
+  return (
+    <HeroBand
+      title={`Good ${greeting(now.getHours())}, Bryan`}
+      sub={now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
+      action={<LinkButton href="/money">Open money</LinkButton>}
+    >
+      <HeroStat label="Net worth" value={usdCompact(nw.net_worth)} delta={usd(nw.net_worth)} deltaTone="flat" />
+      <HeroStat label="Liquid cash" value={usdCompact(nw.liquid_cash)} delta={usd(nw.liquid_cash)} deltaTone="flat" />
+      <HeroStat
+        label="Open pipeline"
+        value={usdCompact(openValue)}
+        delta={`${openCount} open deal${openCount === 1 ? "" : "s"}`}
+        deltaTone="flat"
+      />
+      <HeroStat
+        label="Occupancy"
+        value={pct(occupancy)}
+        delta={`${portfolio.occupied} of ${portfolio.total} units`}
+        deltaTone={occupancy >= 0.9 ? "up" : occupancy >= 0.6 ? "flat" : "down"}
+      />
+    </HeroBand>
+  );
+}
+
+async function AlertStrip() {
+  const alerts = await getAlerts();
+  if (alerts.length === 0) return null;
+  return (
+    <div className="mb-6 flex flex-wrap gap-2">
+      {alerts.map((a, i) => (
+        <Link
+          key={i}
+          href={a.href ?? "/"}
+          className={cn(
+            "rounded-full px-3 py-1.5 text-[12px] font-medium transition",
+            a.level === "warn"
+              ? "bg-warn/10 text-warn hover:bg-warn/15"
+              : "bg-surface-2 text-muted hover:bg-surface-3 hover:text-fg-dim",
+          )}
+        >
+          <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full align-middle"
+            style={{ background: a.level === "warn" ? "var(--warn)" : "var(--muted)" }} />
+          {a.text}
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+/* ----------------------------------------------------------- today tab */
+
+function FrontRow({ front, venture }: { front: Front; venture?: { slug: string; name: string; accent: string } }) {
+  return (
+    <Row className="items-start">
+      <span className="tabular mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-surface-3 text-[11px] font-semibold text-fg-dim">
+        {front.rank}
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          {venture ? (
+            <Link href={`/ventures/${venture.slug}`} className="text-sm font-semibold hover:text-accent">
+              {front.name}
+            </Link>
+          ) : (
+            <span className="text-sm font-semibold">{front.name}</span>
+          )}
+          {venture && <Badge dot={venture.accent}>{venture.name}</Badge>}
+          <ClassBadge c={front.income_class} />
+          {front.place && <span className="text-[11px] text-muted">{front.place}</span>}
+        </div>
+        {front.current_state && <p className="mt-1 truncate text-[13px] text-muted">{front.current_state}</p>}
+        {front.next_action && (
+          <p className="mt-0.5 text-[13px] text-fg-dim">
+            <span className="text-muted">Next: </span>
+            {front.next_action}
+          </p>
+        )}
+      </div>
+    </Row>
+  );
+}
+
+async function ActiveFronts() {
+  const [ventures, personal] = await Promise.all([getAllVentureData(), getPersonalFronts()]);
+  // A front can match a venture by name or by entity; the explicit name listing wins.
+  const claimed = new Map<string, { front: Front; venture: { slug: string; name: string; accent: string } }>();
+  for (const byName of [true, false]) {
+    for (const vd of ventures) {
+      for (const f of vd.fronts) {
+        if (f.status !== "active" || claimed.has(f.id)) continue;
+        if (byName !== vd.venture.frontNames.includes(f.name)) continue;
+        claimed.set(f.id, {
+          front: f,
+          venture: { slug: vd.venture.slug, name: vd.venture.short, accent: vd.venture.accent },
+        });
+      }
+    }
+  }
+  const owned = [...claimed.values()].sort((a, b) => a.front.rank - b.front.rank);
+  const solo = personal
+    .filter((f) => f.status === "active" && !claimed.has(f.id))
+    .sort((a, b) => a.rank - b.rank);
+
+  return (
+    <Card title="Active fronts" sub="Ranked by where the next hour goes" action={<LinkButton href="/ventures">Ventures</LinkButton>}>
+      {owned.length === 0 && solo.length === 0 ? (
+        <Empty>Nothing active. Every front is parked or done.</Empty>
+      ) : (
+        <>
+          <div>
+            {owned.map(({ front, venture }) => (
+              <FrontRow key={front.id} front={front} venture={venture} />
+            ))}
+          </div>
+          {solo.length > 0 && (
+            <div className="mt-5">
+              <SectionLabel>Personal</SectionLabel>
+              <div>
+                {solo.map((f) => (
+                  <FrontRow key={f.id} front={f} />
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </Card>
+  );
+}
+
+const PRIORITY_TONE = { urgent: "bad", high: "warn", normal: "muted", low: "outline" } as const;
+
+async function DueSoon() {
+  const [tasks, fronts] = await Promise.all([getTasks(), getFronts()]);
+  const frontName = (id: string | null) => (id ? fronts.find((f) => f.id === id)?.name : undefined);
+  const now = new Date();
+  const horizon = new Date(now.getTime() + 7 * 864e5).toISOString().slice(0, 10);
+  const today = now.toISOString().slice(0, 10);
+
+  const due: Task[] = tasks
+    .filter((t) => t.status !== "done" && t.status !== "cancelled" && t.due_on && t.due_on <= horizon)
     .sort((a, b) => (a.due_on ?? "").localeCompare(b.due_on ?? ""));
 
   return (
-    <div className="space-y-5">
-      {alerts.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {alerts.map((a, i) => (
-            <Link key={i} href={a.href ?? "/"}
-              className={cn("rounded-md border px-2.5 py-1 text-xs", a.level === "warn" ? "border-warn/40 bg-warn/10 text-warn" : "border-border bg-surface-2 text-muted")}>
-              {a.text}
-            </Link>
+    <Card title="Due & overdue" sub="Everything landing in the next seven days" action={<LinkButton href="/tasks">All tasks</LinkButton>}>
+      {due.length === 0 ? (
+        <Empty>Nothing due this week. Clear.</Empty>
+      ) : (
+        <div>
+          {due.map((t) => {
+            const overdue = (t.due_on ?? "") < today;
+            const name = frontName(t.front_id);
+            return (
+              <Row key={t.id}>
+                <TaskCheck id={t.id} status={t.status} />
+                <span className="min-w-0 flex-1 truncate text-[13.5px]">{t.title}</span>
+                {name && <span className="hidden truncate text-[11px] text-muted sm:inline">{name}</span>}
+                <Badge tone={PRIORITY_TONE[t.priority]}>{t.priority}</Badge>
+                <span className={cn("tabular w-24 shrink-0 text-right text-[12px]", overdue ? "text-bad" : "text-muted")}>
+                  {overdue ? `overdue ${dateShort(t.due_on)}` : t.due_on === today ? "today" : dateShort(t.due_on)}
+                </span>
+              </Row>
+            );
+          })}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+const KIND_TONE = { call: "accent", email: "muted", sms: "muted", meeting: "ok", note: "outline", system: "muted" } as const;
+
+async function RecentActivity() {
+  const [activities, contacts] = await Promise.all([getActivities(), getContacts()]);
+  const recent = [...activities]
+    .sort((a, b) => b.occurred_at.localeCompare(a.occurred_at))
+    .slice(0, 8);
+
+  return (
+    <Card title="Recent activity" sub="Newest first">
+      {recent.length === 0 ? (
+        <Empty>No activity logged yet.</Empty>
+      ) : (
+        <div>
+          {recent.map((a) => {
+            const who = a.contact_id ? contacts.find((c) => c.id === a.contact_id)?.full_name : undefined;
+            return (
+              <Row key={a.id} className="items-start">
+                <Avatar name={who ?? a.kind} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate text-[13px] font-medium">{who ?? a.kind}</span>
+                    <Badge tone={KIND_TONE[a.kind]}>{a.kind}</Badge>
+                  </div>
+                  <p className="mt-0.5 truncate text-[12.5px] text-muted">{a.body ?? "—"}</p>
+                </div>
+                <span className="tabular shrink-0 text-[11px] text-muted">{relTime(a.occurred_at)}</span>
+              </Row>
+            );
+          })}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+async function TaskLoad() {
+  const tasks = await getTasks();
+  const count = (s: Task["status"]) => tasks.filter((t) => t.status === s).length;
+  return (
+    <Card title="Task load" sub="across all ventures">
+      <Segments
+        height={10}
+        parts={[
+          { label: "Done", value: count("done"), color: "var(--ok)" },
+          { label: "In progress", value: count("doing"), color: "var(--accent-2)" },
+          { label: "To do", value: count("todo"), color: "var(--warn)" },
+        ]}
+      />
+    </Card>
+  );
+}
+
+function TodayTab() {
+  return (
+    <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
+      <div className="space-y-4">
+        <ActiveFronts />
+        <DueSoon />
+      </div>
+      <div className="space-y-4">
+        <RecentActivity />
+        <TaskLoad />
+      </div>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------- position tab */
+
+async function GoalsCard() {
+  const [goals, nw] = await Promise.all([getGoals(), getNetWorth()]);
+  return (
+    <Card title="Goals" sub="The ladder the numbers answer to">
+      <GoalsTree goals={goals} overrides={{ net_worth: nw.net_worth }} />
+    </Card>
+  );
+}
+
+function PositionTab() {
+  return (
+    <div className="space-y-4">
+      <PositionStats />
+      <IncomeMixCard />
+      <GoalsCard />
+      <IncomeByClassCard />
+    </div>
+  );
+}
+
+/* -------------------------------------------------------- movement tab */
+
+async function PipelineCard() {
+  const ventures = await getAllVentureData();
+  return (
+    <Card title="Pipeline" sub="Open deals by venture" action={<LinkButton href="/deals">All deals</LinkButton>}>
+      {ventures.length === 0 ? (
+        <Empty>No ventures configured.</Empty>
+      ) : (
+        <div className="space-y-1">
+          {ventures.map((vd) => {
+            const open = vd.deals.filter((d) => d.status === "open");
+            const stages = [...vd.stages].sort((a, b) => a.sort - b.sort);
+            const parts = stages.map((s, i) => ({
+              label: s.name,
+              value: open.filter((d) => d.stage_id === s.id).length,
+              color: ramp(i, stages.length),
+            }));
+            const hasDeals = parts.some((p) => p.value > 0);
+            return (
+              <div key={vd.venture.slug} className="border-b border-border-soft py-4 last:border-0">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <Link href={`/ventures/${vd.venture.slug}`} className="flex items-center gap-2 hover:text-accent">
+                    <i className="h-2 w-2 rounded-full" style={{ background: vd.venture.accent }} />
+                    <span className="text-sm font-semibold">{vd.venture.name}</span>
+                  </Link>
+                  <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-[12.5px]">
+                    <span className="text-muted">
+                      <span className="tabular text-fg">{open.length}</span> open
+                    </span>
+                    <span className="text-muted">
+                      Value <span className="tabular text-fg">{usdCompact(vd.openValue)}</span>
+                    </span>
+                    <span className="text-muted">
+                      Weighted <span className="tabular text-fg">{usdCompact(vd.weightedValue)}</span>
+                    </span>
+                  </div>
+                </div>
+                <div className="mt-3">
+                  {hasDeals ? (
+                    <Segments parts={parts} />
+                  ) : (
+                    <p className="text-[12.5px] text-muted">No open deals in this pipeline.</p>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+const UNIT_TONE: Record<Unit["status"], "ok" | "warn" | "muted" | "accent" | "bad"> = {
+  occupied: "ok",
+  vacant: "warn",
+  turning: "muted",
+  in_acquisition: "accent",
+  offline: "bad",
+};
+
+async function UnitsCard() {
+  const [units, properties] = await Promise.all([getUnits(), getProperties()]);
+  const prop = (id: string) => properties.find((p) => p.id === id);
+
+  return (
+    <Card title="Units" sub={`${units.length} across the portfolio`}>
+      {units.length === 0 ? (
+        <Empty>No units yet.</Empty>
+      ) : (
+        <div>
+          {units.map((u) => {
+            const p = prop(u.property_id);
+            const vacantDays = u.vacant_since ? daysBetween(u.vacant_since) : null;
+            return (
+              <Row key={u.id} className="items-start">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[13.5px] font-medium">{u.name}</span>
+                    <Badge tone={UNIT_TONE[u.status]}>{u.status.replace("_", " ")}</Badge>
+                  </div>
+                  <p className="mt-0.5 truncate text-[12px] text-muted">
+                    {p ? `${p.address1}${p.city ? `, ${p.city}` : ""}${p.state ? `, ${p.state}` : ""}` : "Unlinked property"}
+                  </p>
+                </div>
+                <div className="shrink-0 text-right">
+                  <div className="tabular text-[13px]">{u.target_rate != null ? `${usd(u.target_rate)}/mo` : "—"}</div>
+                  {vacantDays != null && (
+                    <div className={cn("tabular text-[11px]", vacantDays > 7 ? "text-warn" : "text-muted")}>
+                      vacant {vacantDays}d
+                    </div>
+                  )}
+                </div>
+              </Row>
+            );
+          })}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+async function NewThisWeek() {
+  const [deals, contacts] = await Promise.all([getDeals(), getContacts()]);
+  const cutoff = new Date().getTime() - 7 * 864e5;
+
+  const items = [
+    ...deals
+      .filter((d) => +new Date(d.created_at) >= cutoff)
+      .map((d) => ({ id: d.id, at: d.created_at, label: d.title, kind: "Deal", href: `/deals/${d.id}`, sub: usdCompact(d.value) })),
+    ...contacts
+      .filter((c) => +new Date(c.created_at) >= cutoff)
+      .map((c) => ({ id: c.id, at: c.created_at, label: c.full_name, kind: "Contact", href: `/people/${c.id}`, sub: c.role ?? "" })),
+  ].sort((a, b) => b.at.localeCompare(a.at));
+
+  return (
+    <Card title="New this week" sub="Deals and people added in the last seven days">
+      {items.length === 0 ? (
+        <Empty>Nothing new in the last seven days.</Empty>
+      ) : (
+        <div>
+          {items.map((i) => (
+            <Row key={`${i.kind}-${i.id}`}>
+              <Badge tone={i.kind === "Deal" ? "accent" : "muted"}>{i.kind}</Badge>
+              <Link href={i.href} className="min-w-0 flex-1 truncate text-[13.5px] font-medium hover:text-accent">
+                {i.label}
+              </Link>
+              {i.sub && <span className="tabular shrink-0 text-[12px] text-muted">{i.sub}</span>}
+              <span className="tabular w-10 shrink-0 text-right text-[11px] text-muted">{relTime(i.at)}</span>
+            </Row>
           ))}
         </div>
       )}
+    </Card>
+  );
+}
 
-      <PageHeader title="Command center" sub={new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })} />
-
-      {/* Row 0: Orientation */}
-      <div className="grid gap-4 lg:grid-cols-[1fr_2fr_1fr]">
-        <Card title="Roles">
-          {roles.length === 0 ? <Empty>No roles</Empty> : (
-            <ul className="space-y-2">
-              {roles.map(r => (
-                <li key={r.id}>
-                  <div className="text-sm font-medium">{r.name}</div>
-                  {r.commitment && <div className="text-xs text-muted">{r.commitment}</div>}
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-
-        <Card title="Active fronts" action={<LinkButton href="/fronts">All fronts</LinkButton>}>
-          {active.length === 0 ? <Empty>No active fronts</Empty> : (
-            <ol className="divide-y divide-border">
-              {active.map(f => (
-                <li key={f.id} className="flex gap-3 py-2">
-                  <div className="w-5 shrink-0 pt-0.5 text-right text-xs tabular-nums text-muted">{f.rank}</div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-medium">{f.name}</span>
-                      <ClassBadge c={f.income_class} />
-                      {f.place && <span className="text-[11px] text-muted">{f.place}</span>}
-                    </div>
-                    {f.current_state && <div className="mt-0.5 truncate text-xs text-muted">{f.current_state}</div>}
-                    {f.next_action && <div className="mt-0.5 text-xs"><span className="text-muted">Next: </span>{f.next_action}</div>}
-                  </div>
-                </li>
-              ))}
-            </ol>
-          )}
-        </Card>
-
-        <Card title="Where">
-          <div className="text-[11px] uppercase tracking-wide text-muted">Fronts by place</div>
-          <ul className="mt-1 mb-3 space-y-1">
-            {[...byPlace.entries()].sort((a, b) => b[1] - a[1]).map(([place, n]) => (
-              <li key={place} className="flex justify-between text-sm"><span>{place}</span><span className="tabular-nums text-muted">{n}</span></li>
-            ))}
-          </ul>
-          <div className="text-[11px] uppercase tracking-wide text-muted">Entities by jurisdiction</div>
-          <ul className="mt-1 space-y-1">
-            {[...byJur.entries()].sort((a, b) => b[1] - a[1]).map(([j, n]) => (
-              <li key={j} className="flex justify-between text-sm"><span>{j}</span><span className="tabular-nums text-muted">{n}</span></li>
-            ))}
-          </ul>
-        </Card>
+function MovementTab() {
+  return (
+    <div className="space-y-4">
+      <PipelineCard />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <UnitsCard />
+        <NewThisWeek />
       </div>
+    </div>
+  );
+}
 
-      {/* Row 1: Position */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat label="Net worth" value={usd(nw.net_worth)} tone={nw.net_worth >= 0 ? undefined : "bad"} />
-        <Stat label="Liquid cash" value={usd(nw.liquid_cash)} />
-        <Stat label="Total debt" value={usd(nw.total_debt)} />
-        <div className="rounded-xl border border-border bg-surface p-4">
-          <div className="text-xs uppercase tracking-wide text-muted">{nwGoal?.name ?? "$30M goal"}</div>
-          <div className="mt-1 text-2xl font-semibold tabular-nums">{(goalPct * 100).toFixed(2)}%</div>
-          <Progress value={goalPct} className="mt-2" tone="ok" />
-          <div className="mt-1 text-xs text-muted">{usdCompact(nw.net_worth)} of {usdCompact(target)}</div>
-        </div>
-      </div>
+/* ------------------------------------------------------------------ page */
 
-      {/* Row 2: Income mix */}
-      <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
-        <Card title="Income mix, trailing 12 months">
-          <IncomeMix data={series} />
-        </Card>
-        <div className="grid gap-4">
-          <Stat label="ABI share of T12 income" value={pct(abiShare)} sub={`${usd(t12.ABI)} of ${usd(t12Total)}`} tone={abiShare >= 0.25 ? "ok" : undefined} />
-          <Stat label="BOI to ABI" value={pct(boiShare)} sub="BOI share of T12. Business operating income is the bridge; the target is converting it into asset-backed income." />
-        </div>
-      </div>
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const { tab } = await searchParams;
+  const key = typeof tab === "string" && TABS.some((t) => t.key === tab) ? tab : "today";
 
-      {/* Row 3: Portfolio */}
-      <Card title="Portfolio" action={<LinkButton href="/portfolio">Units</LinkButton>}>
-        <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-5">
-          <Stat label="Occupied" value={portfolio.occupied} tone="ok" />
-          <Stat label="Vacant" value={portfolio.vacant} tone={portfolio.vacant > 0 ? "warn" : undefined} />
-          <Stat label="Turning" value={portfolio.turning} />
-          <Stat label="In acquisition" value={portfolio.in_acquisition} />
-          <Stat label="Occupancy" value={pct(occRate)} sub={`${portfolio.occupied} of ${portfolio.total} units`} />
-        </div>
-      </Card>
-
-      {/* Row 4: Pipeline */}
-      <Card title="Pipeline" action={<LinkButton href="/deals">All deals</LinkButton>}>
-        {pipes.size === 0 ? <Empty>No pipelines</Empty> : (
-          <div className="grid gap-4 md:grid-cols-2">
-            {[...pipes.entries()].map(([slug, rows]) => {
-              const sorted = [...rows].sort((a, b) => a.sort - b.sort);
-              const deals = sorted.reduce((s, r) => s + r.deals, 0);
-              const value = sorted.reduce((s, r) => s + r.value, 0);
-              const weighted = sorted.reduce((s, r) => s + r.weighted, 0);
-              return (
-                <Link key={slug} href={`/deals?pipeline=${slug}`} className="rounded-lg border border-border p-3 hover:bg-surface-2">
-                  <div className="flex items-baseline justify-between">
-                    <div className="text-sm font-medium">{sorted[0].pipeline}</div>
-                    <div className="text-xs text-muted">{deals} open</div>
-                  </div>
-                  <div className="mt-2 flex h-2 w-full overflow-hidden rounded-full bg-surface-2">
-                    {deals > 0 && sorted.map((r, i) => r.deals > 0 && (
-                      <div key={r.stage} title={`${r.stage}: ${r.deals}`} style={{ width: `${(r.deals / deals) * 100}%`, background: "var(--accent)", opacity: 0.35 + (0.65 * (i + 1)) / sorted.length }} />
-                    ))}
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-muted">
-                    {sorted.map(r => <span key={r.stage}>{r.stage} <span className="tabular-nums text-fg">{r.deals}</span></span>)}
-                  </div>
-                  <div className="mt-2 flex gap-4 text-xs">
-                    <span><span className="text-muted">Open </span><span className="tabular-nums">{usdCompact(value)}</span></span>
-                    <span><span className="text-muted">Weighted </span><span className="tabular-nums">{usdCompact(weighted)}</span></span>
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-        )}
-      </Card>
-
-      {/* Row 5: Today */}
-      <Card title="Today" action={<LinkButton href="/tasks">All tasks</LinkButton>}>
-        {due.length === 0 ? <Empty>Nothing due today. Clear.</Empty> : (
-          <ul className="divide-y divide-border">
-            {due.map(t => {
-              const overdue = (t.due_on ?? "") < today;
-              return (
-                <li key={t.id} className="flex items-center gap-3 py-1.5 text-sm">
-                  <TaskCheck id={t.id} done={false} />
-                  <span className="flex-1">{t.title}</span>
-                  {t.priority === "urgent" || t.priority === "high" ? <Badge tone={t.priority === "urgent" ? "bad" : "warn"}>{t.priority}</Badge> : null}
-                  <span className={cn("text-xs tabular-nums", overdue ? "text-bad" : "text-muted")}>{overdue ? `overdue · ${dateShort(t.due_on)}` : "today"}</span>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </Card>
+  return (
+    <div>
+      <Hero />
+      <AlertStrip />
+      <Tabs tabs={TABS} active={key} hrefFor={hrefFor} />
+      {key === "position" ? <PositionTab /> : key === "movement" ? <MovementTab /> : <TodayTab />}
     </div>
   );
 }

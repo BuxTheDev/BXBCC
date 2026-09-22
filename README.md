@@ -34,7 +34,8 @@ src/lib/types.ts       TS types mirroring the schema
 src/lib/data.ts        readers (server-only) — demo or Supabase
 src/lib/actions.ts     server actions (writes)
 src/lib/demo.ts        in-memory demo store
-src/app/               routes: / fronts goals entities assets money deals contacts organizations portfolio tasks
+src/app/               routes: / money ventures ventures/[slug] people people/[id] deals/[id] tasks
+src/lib/ventures.ts    venture config — add a venture here, not in the schema
 src/components/        ui kit, charts, life/*, crm/*
 ```
 
@@ -44,7 +45,8 @@ src/components/        ui kit, charts, life/*, crm/*
 | --- | --- |
 | 0 Schema | Done — `supabase/migrations` |
 | 1 Life layer | Done — home, fronts, goals, entities, assets, money |
-| 2 CRM core | Done — contacts, orgs, deals/kanban, deal & contact detail, tasks |
+| 2 CRM core | Done — people, deals/kanban, deal & contact detail, tasks |
+| 2b Redesign | Done — venture-first nav, 3-tab home, dark gradient UI |
 | 3 Property ops | Partial — units + status; occupancies/bookings UI not built |
 | 4 Money | Partial — manual transactions + class rollups; no Plaid |
 | 5 Automation | Not started — rules engine, Salvo webhook (`/api/salvo` — deal.offer_fields is ready for it), SMS/email, digest |

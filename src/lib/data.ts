@@ -95,11 +95,11 @@ export async function getAlerts(): Promise<Alert[]> {
   const alerts: Alert[] = [];
   const today = Date.now();
   for (const u of units) if (u.status === "vacant" && u.vacant_since && (today - +new Date(u.vacant_since)) / 864e5 > 7)
-    alerts.push({ level: "warn", text: `${u.name} vacant ${Math.floor((today - +new Date(u.vacant_since)) / 864e5)} days`, href: "/portfolio" });
+    alerts.push({ level: "warn", text: `${u.name} vacant ${Math.floor((today - +new Date(u.vacant_since)) / 864e5)} days`, href: "/ventures" });
   for (const d of deals) if (d.status === "open" && (today - +new Date(d.last_activity_at)) / 864e5 > 14)
     alerts.push({ level: "warn", text: `No activity on “${d.title}” in 14+ days`, href: `/deals/${d.id}` });
   for (const e of entities) if (e.annual_filing_due && (+new Date(e.annual_filing_due) - today) / 864e5 < 30)
-    alerts.push({ level: "info", text: `${e.name} filing due ${e.annual_filing_due}`, href: "/entities" });
+    alerts.push({ level: "info", text: `${e.name} filing due ${e.annual_filing_due}`, href: "/money?tab=entities" });
   for (const a of accounts) if (a.floor_alert != null && !a.is_liability && a.balance < a.floor_alert)
     alerts.push({ level: "warn", text: `${a.name} below floor ($${a.balance.toLocaleString()})`, href: "/money" });
   const overdue = tasks.filter(t => t.status !== "done" && t.status !== "cancelled" && t.due_on && +new Date(t.due_on) < today).length;
@@ -108,3 +108,74 @@ export async function getAlerts(): Promise<Alert[]> {
 }
 
 export { isDemo };
+
+/* ---------------- venture-scoped reads ---------------- */
+import { VENTURES, PERSONAL_FRONT_NAMES, type Venture } from "./ventures";
+
+export interface VentureData {
+  venture: Venture;
+  fronts: T.Front[];
+  entities: T.Entity[];
+  properties: T.Property[];
+  units: T.Unit[];
+  pipelines: T.Pipeline[];
+  stages: T.PipelineStage[];
+  deals: T.Deal[];
+  tasks: T.Task[];
+  activities: T.Activity[];
+  contacts: T.Contact[];
+  /** trailing-12 income attributed to this venture's entities */
+  incomeT12: number;
+  openValue: number;
+  weightedValue: number;
+  occupied: number;
+  totalUnits: number;
+}
+
+export async function getVentureData(v: Venture): Promise<VentureData> {
+  const [fronts, entities, properties, units, pipelines, stages, deals, tasks, activities, contacts, tx] = await Promise.all([
+    getFronts(), getEntities(), getProperties(), getUnits(), getPipelines(), getStages(), getDeals(), getTasks(), getActivities(), getContacts(), getTransactions(),
+  ]);
+  const ents = entities.filter(e => v.entityNames.includes(e.name));
+  const entIds = new Set(ents.map(e => e.id));
+  const props = properties.filter(p => p.use_tags?.some(t => v.useTags.includes(t)) || (p.entity_id && entIds.has(p.entity_id)));
+  const propIds = new Set(props.map(p => p.id));
+  const us = units.filter(u => propIds.has(u.property_id));
+  const pipes = pipelines.filter(p => p.venture && v.pipelineVenture.includes(p.venture));
+  const pipeIds = new Set(pipes.map(p => p.id));
+  const sts = stages.filter(s => pipeIds.has(s.pipeline_id));
+  const ds = deals.filter(d => pipeIds.has(d.pipeline_id));
+  const dealIds = new Set(ds.map(d => d.id));
+  const claimedElsewhere = new Set(VENTURES.filter(x => x.slug !== v.slug).flatMap(x => x.frontNames));
+  const frs = fronts.filter(f => v.frontNames.includes(f.name)
+    || (!claimedElsewhere.has(f.name) && !PERSONAL_FRONT_NAMES.includes(f.name) && f.entity_id && entIds.has(f.entity_id)));
+  const frontIds = new Set(frs.map(f => f.id));
+  const ts = tasks.filter(t => (t.front_id && frontIds.has(t.front_id)) || (t.record_type === "deal" && t.record_id && dealIds.has(t.record_id)));
+  const acts = activities.filter(a => a.record_type === "deal" && dealIds.has(a.record_id));
+  const contactIds = new Set(ds.map(d => d.primary_contact_id).filter(Boolean) as string[]);
+  const cutoff = new Date(); cutoff.setMonth(cutoff.getMonth() - 12);
+  const incomeT12 = tx.filter(t => t.amount > 0 && t.entity_id && entIds.has(t.entity_id) && new Date(t.posted_on) >= cutoff)
+    .reduce((s, t) => s + Number(t.amount), 0);
+  const open = ds.filter(d => d.status === "open");
+  const stageById = new Map(sts.map(s => [s.id, s]));
+  return {
+    venture: v, fronts: frs, entities: ents, properties: props, units: us, pipelines: pipes, stages: sts,
+    deals: ds, tasks: ts, activities: acts, contacts: contacts.filter(c => contactIds.has(c.id)),
+    incomeT12,
+    openValue: open.reduce((s, d) => s + Number(d.value), 0),
+    weightedValue: open.reduce((s, d) => s + Number(d.value) * Number(stageById.get(d.stage_id ?? "")?.win_probability ?? 0), 0),
+    occupied: us.filter(u => u.status === "occupied").length,
+    totalUnits: us.length,
+  };
+}
+
+export async function getAllVentureData(): Promise<VentureData[]> {
+  return Promise.all(VENTURES.map(getVentureData));
+}
+
+/** Fronts not owned by any venture (degree, career). */
+export async function getPersonalFronts(): Promise<T.Front[]> {
+  const fronts = await getFronts();
+  const owned = new Set(VENTURES.flatMap(v => v.frontNames));
+  return fronts.filter(f => PERSONAL_FRONT_NAMES.includes(f.name) || !owned.has(f.name));
+}
