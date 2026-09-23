@@ -8,3 +8,5 @@
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important}}
 @media(max-width:760px){body:has(dialog[open]){overflow:hidden}.phone-menu-links a{overflow-wrap:anywhere}.phone-menu-links a span{flex-shrink:0}.record-fields dd a{overflow-wrap:anywhere}}
+
+.sync-indicator{font-size:11px;color:#49633b;max-width:200px;overflow-wrap:anywhere;margin-left:12px}@media(max-width:760px){.topbar .top-right{display:none}.sync-indicator{max-width:135px;font-size:10px}}
