@@ -58,3 +58,9 @@ src/components/        ui kit, charts, life/*, crm/*
 - `/api/salvo` webhook: accept Salvo's GHL-mapped CSV row shape, upsert contact + deal into `tl-acq` at "LOI sent".
 - Occupancy CRUD on `/portfolio` (bookings, resident stays).
 - pg_cron + Edge Function for the Monday digest and the alert rules already computed in `getAlerts()`.
+
+## Redesigned BXB OS preview
+
+Open `/os#/today` for the mobile-ready workspace. Original application routes are preserved. The six files in `public/os` form a standalone frontend with daily focus, weekly reviews, entity hierarchy, financial summaries, and local backup/recovery.
+
+Records remain browser-local until cloud saving is configured. Existing local-host data does not move automatically to a deployment: export a backup from the original browser and preview/import it in Settings & recovery. Cloud connection settings are entered separately; no secrets or browser backups are included in this repository. The optional manual cloud save integration still needs its dedicated schema and live verification. It does not use the original Next.js application's service-role database connection.
