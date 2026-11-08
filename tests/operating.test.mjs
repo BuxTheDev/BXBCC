@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { createContext, runInContext } from "node:vm";
 import { coziiVog, listings, nextBoardActions, pendingDecisions, signedPolicies, statusLabels } from "../src/operating/cozii-vog.ts";
 
 test("generated browser data matches the typed snapshot", () => {
@@ -61,6 +62,50 @@ test("snapshot does not carry secrets, door codes, wi-fi, or resident identities
   }
   assert.match(coziiVog.financialNote, /intentionally not populated/);
   assert.equal(JSON.stringify(coziiVog).includes("residentName"), false);
+});
+
+test("business map is entity data, and the operating page only links to it", () => {
+  const page = readFileSync("public/os/operating.js", "utf8");
+  assert.match(page, /href="#\/entities"/);
+  assert.equal(page.includes("entityCard("), false);
+  const context = {
+    db: {
+      entities: [
+        { id: "bxb", name: "BXB International", type: "Business", parent: "", notes: "" },
+        { id: "vog", name: "Valley of Grace Recovery Home LLC", type: "Business", parent: "", notes: "" },
+        { id: "personal", name: "Personal", type: "Personal", parent: "", notes: "" },
+      ],
+      preferences: [{}],
+      assets: [],
+    },
+    fronts: [{ id: "2", entity: "BXB International" }],
+    prefs() { return context.db.preferences[0]; },
+    uid: () => "new-id",
+    persist() {},
+    baseSave() {},
+    document: { querySelector: () => null, addEventListener() {}, getElementById: () => null },
+    window: {},
+    location: { hash: "", pathname: "/os", search: "" },
+    history: { replaceState() {} },
+    localStorage: { getItem: () => null, setItem() {} },
+    esc: (value) => String(value ?? ""),
+  };
+  context.globalThis = context;
+  createContext(context);
+  runInContext(readFileSync("public/os/cozii-vog-data.js", "utf8"), context);
+  runInContext(readFileSync("public/os/operating.js", "utf8"), context);
+  runInContext("installOperatingEntities()", context);
+  const byName = Object.fromEntries(context.db.entities.map((entity) => [entity.name, entity]));
+  assert.equal(byName["Equitive Capital Holdings, LLC"].parent, "");
+  assert.equal(byName["BXB International LLC"].parent, "Equitive Capital Holdings, LLC");
+  assert.match(byName["BXB International LLC"].caption, /Conducts business as Cozii Housing Accommodations/);
+  assert.match(byName["BXB International LLC"].caption, /current status unverified/);
+  assert.equal(byName["Snowbook Properties LLC"].parent, "");
+  assert.equal(byName["Valley of Grace Recovery Home LLC"].parent, "");
+  assert.equal(context.fronts[0].entity, "BXB International LLC");
+  assert.equal(byName["Personal"].parent, "");
+  runInContext("installOperatingEntities()", context);
+  assert.equal(context.db.entities.filter((entity) => entity.name === "BXB International LLC").length, 1);
 });
 
 test("operating page is wired into fronts, Today, and hash routes", () => {

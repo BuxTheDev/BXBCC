@@ -83,12 +83,7 @@ function operatingHeading() {
 function operatingSource() {
   return `<p class="small-notice operating-source">${esc(coziiVog.asOf)} source snapshot · ${esc(coziiVog.timezone)}. Planning only. No contacts, payments, signatures, account or booking changes are authorized from this page.</p>`;
 }
-function entityCard(id) {
-  const entity = operatingEntity(id);
-  return `<article class="object-card"><div class="eyebrow">${esc(entity.role)}</div><h2>${esc(entity.name)}</h2><p>${esc(entity.source)}</p>${operatingChips(entity.status)}</article>`;
-}
 function operatingOverview() {
-  const connector = Object.fromEntries(coziiVog.connectors.map((item) => [item.after, item.text]));
   return `<div class="stats">${[
     ["#/operating/properties", "Property snapshot", `${listings().length} <span style="font-size:14px">listings</span>`, "Documented · occupancy unverified"],
     ["#/operating/questions", "Valley of Grace", "Proposed", "Creekside purpose owner-confirmed"],
@@ -96,16 +91,12 @@ function operatingOverview() {
     ["#/operating/decisions", "Open decisions", `${pendingDecisions().length} <span style="font-size:14px">pending gates</span>`, "Decision-log items needing resolution"],
   ].map(([href, label, value, note]) => `<a class="stat" href="${href}"><small>${label}</small><strong>${value}</strong><span>${note}</span></a>`).join("")}</div>
   <section class="panel"><strong>${esc(coziiVog.creeksideNotice)}</strong> ${operatingChips("Owner-confirmed")}<p>${esc(coziiVog.creeksideDetail)}</p></section>
-  <div class="dashboard-grid"><section class="panel"><div class="mini-heading"><h2>Business map</h2><span>Separate entities, explicit roles</span></div>
-    <div class="operating-flow">${entityCard("equitive")}<p class="operating-connector">↓ ${esc(connector.equitive)}</p>${entityCard("bxb")}<p class="operating-connector">↓ ${esc(connector.bxb)}</p>${entityCard("cozii-housing")}</div>
-    <div class="record-grid" style="margin-top:16px">${entityCard("snowbook")}${entityCard("vog")}</div>
-    <p>${esc(coziiVog.separationNote).replace("No Equitive ownership of Snowbook or VoG is established.", "<strong>No Equitive ownership of Snowbook or VoG is established.</strong>")}</p>
-    <details><summary>Full entity register and authority gaps</summary>${coziiVog.entities.map((entity) => `<div class="linked-row"><div class="row-main"><strong>${esc(entity.name)}</strong><small>${esc(entity.role)}</small><p>${esc(entity.unresolved)}</p>${operatingChips(entity.status)}</div></div>`).join("")}</details>
-  </section><section class="panel"><div class="mini-heading"><h2>Next three actions</h2><span class="chip status-proposed">Proposed</span></div>
+  <div class="mini-heading"><h2>Business map</h2><a class="hq-link" href="#/entities">Open in Entities ↗</a></div>
+  <section class="panel"><div class="mini-heading"><h2>Next three actions</h2><span class="chip status-proposed">Proposed</span></div>
     ${coziiVog.nextThree.map((action, index) => `<div class="operating-question"><span class="operating-step">${index + 1}</span><div><h3>${esc(action.title)}</h3><p>${esc(action.detail)}</p></div></div>`).join("")}
     <div class="operating-gate"><strong>${esc(coziiVog.notLaunchReadyTitle)}</strong><p>${esc(coziiVog.notLaunchReadyDetail)}</p></div>
     <a class="hq-link" href="#/operating/board">Explore the 30-day board ↗</a>
-  </section></div>
+  </section>
   <div class="mini-heading"><h2>Property snapshot</h2><a class="hq-link" href="#/operating/properties">View property register ↗</a></div>
   <div class="record-grid">${listings().map((property, index) => `<article class="object-card"><div class="eyebrow">PROPERTY ${String(index + 1).padStart(2, "0")}</div><h2>${esc(property.name)}</h2><p>${esc(property.address)}</p>${operatingChips(property.status)}<p>${esc(property.footnote)}</p></article>`).join("")}</div>
   <p class="small-notice">${esc(coziiVog.financialNote)}</p>`;
@@ -197,10 +188,44 @@ function operatingFrontSection(front) {
   const kind = operatingFrontKind(front);
   if (!kind) return "";
   const lead = kind === "vog"
-    ? "Valley of Grace Recovery Home LLC is the proposed Creekside operator. The sober-living purpose is owner-confirmed. Approval, readiness, title, and policy adoption are unresolved. Snowbook is a separate entity."
-    : "BXB International LLC conducts business as Cozii Housing Accommodations. Equitive Capital Holdings, LLC is the documented 100% member in the cited agreement; current status is unverified. Snowbook and Valley of Grace stay separate entities.";
+    ? "Valley of Grace Recovery Home LLC is the proposed Creekside operator. Purpose is owner-confirmed. Approval, readiness, and adoption are still open."
+    : "BXB International LLC conducts business as Cozii Housing Accommodations. The entity map is with your other entities.";
   const view = kind === "vog" ? "policies" : "properties";
-  return `<section class="detail-section operating-front-link"><div class="eyebrow">OPERATING PICTURE · THIS FRONT</div><h3>Cozii & Valley of Grace</h3><p>${esc(lead)}</p><p>${listings().length} documented listings · ${coziiVog.library.length} draft policies, ${signedPolicies().length} signed · ${pendingDecisions().length} decision-log items with pending gates.</p><a class="secondary" href="#/operating/${view}">Open the operating picture ↗</a></section>`;
+  return `<section><h3>Operating picture <span class="suggestion">Nov 7 snapshot</span></h3><p>${esc(lead)}</p><a class="hq-link" href="#/operating/${view}">Open the operating picture ↗</a></section>`;
+}
+function operatingEntityNotes(id) {
+  const entity = operatingEntity(id);
+  return [entity.role, entity.source, entity.unresolved].filter(Boolean).join(" ");
+}
+function installOperatingEntities() {
+  if (typeof prefs !== "function" || prefs().operatingMapVersion) return;
+  const specs = [
+    { name: "Equitive Capital Holdings, LLC", type: "Holding company", parent: "", caption: "Listed as the 100% member of BXB in the cited agreement. No established ownership of Snowbook or Valley of Grace.", notes: operatingEntityNotes("equitive") },
+    { name: "BXB International LLC", aliases: ["BXB International"], type: "Operating company", parent: "Equitive Capital Holdings, LLC", caption: "Conducts business as Cozii Housing Accommodations. Documented 100% member in the cited agreement; current status unverified.", notes: operatingEntityNotes("bxb") },
+    { name: "Snowbook Properties LLC", aliases: ["Snowbook Properties, LLC"], type: "Property holding company", parent: "", caption: "Separate entity. Identified as the Creekside owner in application context; title unresolved.", notes: operatingEntityNotes("snowbook") },
+    { name: "Valley of Grace Recovery Home LLC", type: "Operating company", parent: "", caption: "Separate entity. Proposed Creekside operator. Purpose owner-confirmed Nov 7, 2026.", notes: operatingEntityNotes("vog") },
+  ];
+  specs.forEach((spec) => {
+    let row = db.entities.find((entity) => entity.name === spec.name || (spec.aliases || []).includes(entity.name));
+    if (row && row.name !== spec.name) {
+      const previous = row.name;
+      row.name = spec.name;
+      fronts.forEach((front) => { if (front.entity === previous) front.entity = spec.name; });
+      Object.values(db).forEach((list) => { if (Array.isArray(list)) list.forEach((item) => { if (!item) return; if (item.entity === previous) item.entity = spec.name; if (item.parent === previous) item.parent = spec.name; }); });
+    }
+    if (!row) {
+      row = { id: uid(), name: spec.name, coOwner: "", ownership: "", structureStatus: "Current", place: "" };
+      db.entities.push(row);
+    }
+    row.type = spec.type;
+    row.parent = spec.parent;
+    row.caption = spec.caption;
+    row.notes = spec.notes;
+    if (!row.structureStatus) row.structureStatus = "Current";
+  });
+  prefs().operatingMapVersion = 1;
+  persist();
+  if (typeof baseSave === "function") baseSave();
 }
 
 function wireOperating() {
@@ -236,9 +261,16 @@ function wireOperating() {
     operatingHQBase(id);
     const front = fronts.find((item) => item.id === id);
     const html = operatingFrontSection(front);
-    const body = document.querySelector("#hq .hq-body");
-    if (html && body) body.insertAdjacentHTML("afterbegin", html);
+    const controls = document.querySelector("#hq .hq-controls");
+    if (html && controls) controls.insertAdjacentHTML("afterend", html);
   };
+  const operatingStructureBase = entityStructure;
+  entityStructure = function () {
+    const html = operatingStructureBase();
+    if (entityExample) return html;
+    return html.replace('<div class="structure-toolbar">', `<p class="small-notice">${esc(coziiVog.separationNote)}</p><div class="structure-toolbar">`);
+  };
+  installOperatingEntities();
 
   const operatingCardBase = card;
   card = function (front) {

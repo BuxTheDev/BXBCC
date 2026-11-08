@@ -23,7 +23,6 @@ a.stat{color:inherit}
 .operating-meta{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-top:10px;color:var(--muted);font-size:11px}
 .priority-p0{background:#f4e9d7;color:#99703b;border-color:transparent}
 .operating-source{margin-top:14px}
-.operating-front-link h3{margin:8px 0}
-.operating-front-link .secondary{display:inline-block;margin-top:8px}
 .object-card .operating-chips{margin-top:4px}
+.entity-node .node-ownership{overflow-wrap:anywhere}
 @media(max-width:760px){.operating-question{gap:10px}.operating-meta{align-items:flex-start}}
