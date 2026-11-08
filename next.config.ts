@@ -1,5 +1,5 @@
 import type { NextConfig } from "next";
-const workspaceRoutes = ["/", "/os", "/command", "/today", "/fronts", "/goals", "/tasks", "/review", "/entities", "/assets", "/money", "/contacts", "/deals", "/documents", "/capture", "/settings"];
+const workspaceRoutes = ["/", "/os", "/command", "/today", "/fronts", "/operating", "/goals", "/tasks", "/review", "/entities", "/assets", "/money", "/contacts", "/deals", "/documents", "/capture", "/settings"];
 const nextConfig: NextConfig = {
   async rewrites() {
     return { beforeFiles: workspaceRoutes.map(source => ({ source, destination: "/os/index.html" })) };
