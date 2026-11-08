@@ -1,0 +1,29 @@
+/* Operating picture. Uses the workspace tokens; no separate theme. */
+a.stat{color:inherit}
+.operating-sections{flex-wrap:wrap;height:auto}
+.operating-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.operating-status-raw{flex-basis:100%;color:var(--muted);font-size:11px;line-height:1.5}
+.chip.status-documented{background:#e7eee4;color:var(--green)}
+.chip.status-owner{background:#eaf0df;color:#526d3f}
+.chip.status-proposed{background:#f4f5f2;color:var(--muted)}
+.chip.status-unresolved{background:#f4e9d7;color:#99703b}
+.operating-connector{margin:8px 2px;color:var(--muted);font-size:11px}
+.operating-flow{display:grid;gap:0}
+.operating-flow .object-card{margin-bottom:0}
+.operating-gate{margin-top:10px;padding:9px 12px;background:#f4f6f1;border-radius:6px;color:#5d6d58;font-size:12px;line-height:1.55}
+.operating-question{display:flex;gap:14px;align-items:flex-start;padding:16px 0;border-top:1px solid var(--line)}
+.operating-question:first-child{border-top:0;padding-top:0}
+.operating-step{width:28px;height:28px;border-radius:50%;background:#eef2e8;display:grid;place-items:center;color:var(--muted);flex:none;font-size:12px}
+.operating-row-link{display:block;flex:1;color:#3e5832;font-size:12px;line-height:1.6}
+.operating-row-link small,.deal-card small{display:block;color:#8b987e;font-size:10px;margin-top:4px}
+.operating-task{display:flex;gap:10px;align-items:flex-start}
+.operating-task input{width:16px;height:16px;margin-top:2px;flex:none}
+.operating-task-title{font-size:13px;line-height:1.5;color:var(--ink)}
+.deal-card.done .operating-task-title{text-decoration:line-through;color:var(--muted)}
+.operating-meta{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-top:10px;color:var(--muted);font-size:11px}
+.priority-p0{background:#f4e9d7;color:#99703b;border-color:transparent}
+.operating-source{margin-top:14px}
+.operating-front-link h3{margin:8px 0}
+.operating-front-link .secondary{display:inline-block;margin-top:8px}
+.object-card .operating-chips{margin-top:4px}
+@media(max-width:760px){.operating-question{gap:10px}.operating-meta{align-items:flex-start}}
